@@ -1295,7 +1295,8 @@ public abstract class AnySoftKeyboard extends AnySoftKeyboardWithQuickText imple
                 break;
             case KeyCodes.VOICE_INPUT:
                 if (mVoiceRecognitionTrigger.isInstalled()) {
-                    mVoiceRecognitionTrigger.startVoiceRecognition(getCurrentAlphabetKeyboard().getDefaultDictionaryLocale());
+                    //mVoiceRecognitionTrigger.startVoiceRecognition(getCurrentAlphabetKeyboard().getDefaultDictionaryLocale());
+                    mVoiceRecognitionTrigger.connectWebSocket();
                 } else {
                     Intent voiceInputNotInstalledIntent = new Intent(getApplicationContext(), VoiceInputNotInstalledActivity.class);
                     voiceInputNotInstalledIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

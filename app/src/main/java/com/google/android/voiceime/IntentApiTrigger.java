@@ -97,8 +97,14 @@ class IntentApiTrigger implements Trigger {
         mLastRecognitionResult = recognitionResult;
 
         // Request the system to display the IME.
-        getInputMethodManager().showSoftInputFromInputMethod(mToken,
-                InputMethodManager.SHOW_IMPLICIT);
+        //getInputMethodManager().showSoftInputFromInputMethod(mToken,
+          //      InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    public void SendDatafromwebsocket(String comingdata)
+
+    {
+        postResult(comingdata);
     }
 
     @Override

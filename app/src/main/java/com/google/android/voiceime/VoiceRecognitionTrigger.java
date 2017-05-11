@@ -16,7 +16,7 @@
 
 package com.google.android.voiceime;
 
-
+import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -26,6 +26,22 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.view.inputmethod.InputMethodSubtype;
 
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.drafts.Draft_17;
+import org.java_websocket.handshake.ServerHandshake;
+import java.net.URI;
+import java.net.URISyntaxException;
+import android.util.Log;
+import android.media.MediaRecorder;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.widget.Toast;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Triggers a voice recognition by using {@link ImeTrigger} or
  * {@link IntentApiTrigger}.
@@ -33,10 +49,19 @@ import android.view.inputmethod.InputMethodSubtype;
 public class VoiceRecognitionTrigger {
 
     private final InputMethodService mInputMethodService;
-
+    Activity context;
     private BroadcastReceiver mReceiver;
 
     private Trigger mTrigger;
+
+    private static final int RECORDER_SAMPLERATE = 8000;
+    private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
+    private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
+    private AudioRecord recorder = null;
+    private int bufferSize = 0;
+    private Thread recordingThread = null;
+    private boolean isRecording = false;
+    public WebSocketClient mWebSocketClient=null;
 
     private ImeTrigger mImeTrigger;
     private IntentApiTrigger mIntentApiTrigger;
@@ -44,6 +69,7 @@ public class VoiceRecognitionTrigger {
     public VoiceRecognitionTrigger(InputMethodService inputMethodService) {
         mInputMethodService = inputMethodService;
         mTrigger = getTrigger();
+        mIntentApiTrigger = new IntentApiTrigger(mInputMethodService);
     }
 
     private Trigger getTrigger() {
@@ -84,6 +110,206 @@ public class VoiceRecognitionTrigger {
      */
     public void startVoiceRecognition() {
         startVoiceRecognition(null);
+    }
+
+    /*
+   *websocket connected
+   */
+    boolean mStartRecording = true;
+
+    public void connectWebSocket(){
+        if(!isNetworkAvailable())
+        {
+            Toast.makeText(context.getApplicationContext(), "This is a plain toast.", Toast.LENGTH_SHORT).show();
+
+            return;
+        }
+        if(mWebSocketClient!=null)
+        {
+            mWebSocketClient.send("EOS");
+            mWebSocketClient=null;
+            onRecord(mStartRecording);
+        }
+        else
+        {
+            createWebSocket();
+        }
+    }
+
+    String errorNotifyer;
+    String comingData;
+    public void createWebSocket() {
+        URI uri;
+        try {
+            //uri = new URI("ws://104.236.244.251:7682/telephony");
+            //uri = new URI("ws://mrcp.govivace.com:7682/telephony");
+            //uri = new URI("ws://echo.websocket.org");
+            uri = new URI("ws://services.govivace.com:49154/telephony");
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        //Map<String, String> headers = new HashMap<>();
+        mWebSocketClient = new WebSocketClient(uri,new Draft_17()) {
+
+            @Override
+            public void onOpen(ServerHandshake serverHandshake) {
+                Log.i("Websocket", "Opened");
+                onRecord(mStartRecording);
+                mStartRecording = !mStartRecording;
+                //Log.i("Websocket","call onopen after onrecord method");
+            }
+
+            @Override
+            public void onMessage(String s) {
+                final String message = s;
+                Log.i("websocket","recieved" + message);
+
+                if (message != null) {
+                    try {
+                        JSONObject jsonObj = new JSONObject(message);
+                        int status = jsonObj.optInt("status");
+                        if (status == 1) {
+                            Toast.makeText(context.getApplicationContext(), "Speech contains a large portion of silence or non-speech", Toast.LENGTH_SHORT).show();
+                        } else if (status == 9) {
+                            errorNotifyer = jsonObj.optString("message");
+                            Toast.makeText(context.getApplicationContext(), errorNotifyer, Toast.LENGTH_SHORT).show();
+                        } else if (status == 5) {
+                            errorNotifyer = jsonObj.optString("message");
+                            Toast.makeText(context.getApplicationContext(), errorNotifyer, Toast.LENGTH_SHORT).show();
+                        }
+                        // Getting JSON Array node
+                        if (status == 0) {
+                            JSONObject hypotheses = jsonObj.getJSONObject("result");
+                            boolean final1 = hypotheses.getBoolean("final");
+                            JSONArray jsonArray = hypotheses.optJSONArray("hypotheses");
+                            for (int i = 0; i < jsonArray.length(); i++) {
+                                JSONObject jsonObject = jsonArray.getJSONObject(i); // getting JSON Object at I'th index
+                                String name = jsonObject.optString("transcript");
+                                Log.i("Json","transcript" + name);
+                                comingData = name;
+
+                                if ( final1)
+                                {
+                                    appenddata();
+                                }
+
+                            }
+
+                        }
+
+                    } catch (JSONException  ex) {
+                        Log.i("JsonException","exception"+ ex);
+                    }
+
+
+                } else {
+                    Log.i("Json", "Couldn't get json from server.");
+
+                    Toast.makeText(context.getApplicationContext(), "Couldn't get json from server. Check LogCat for possible errors!", Toast.LENGTH_SHORT).show();
+
+                }
+
+            }
+
+            @Override
+            public void onClose(int i, String s, boolean b) {
+                Log.i("Websocket", "Closed " + s);
+                mWebSocketClient=null;
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.i("Websocket", "Error " + e.getMessage());
+            }
+        };
+        mWebSocketClient.connect();
+    }
+
+    private void appenddata()
+    {
+        mIntentApiTrigger.SendDatafromwebsocket(comingData);
+        mIntentApiTrigger.onStartInputView();
+        Log.i("Result","Result="+comingData);
+    }
+
+    private void onRecord(boolean start) {
+        if (start) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    }
+
+    final byte data[] = new byte[100000];
+    private void startRecording() {
+        Log.i("Websocket","startrecording function call");
+        bufferSize = AudioRecord.getMinBufferSize(8000,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT);
+
+        if(bufferSize>0) {
+            int readbyte = 0;
+            recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
+                    RECORDER_SAMPLERATE, RECORDER_CHANNELS, RECORDER_AUDIO_ENCODING,data.length);
+
+            int i = recorder.getState();
+            Log.i("Websocket", "value of recorder getstate" + i);
+            if (i == 1)
+                recorder.startRecording();
+
+            isRecording = true;
+            recordingThread = new Thread(new Runnable() {
+
+                public void run() {
+
+                    SendDataToServer();
+
+                }
+            }, "AudioRecorder Thread");
+            recordingThread.start();
+        }
+    }
+
+
+
+    private void SendDataToServer()
+    {
+        while (isRecording) {
+            Log.i("Websocket", "call while loop");
+            recorder.read(data, 0, data.length);
+            //byte sendbuffer[]=new byte[readbyte];
+            //sendbuffer = Arrays.copyOf(data,readbyte);
+            if (mWebSocketClient != null) {
+                Log.i("Websocket","call websocket send ");
+                mWebSocketClient.send(data);
+                try {
+                    Thread.sleep(250);
+                } catch (InterruptedException ie)
+                {
+                    Log.i("Websocket","threadsleep exception"+ie);
+                }
+            }
+
+
+        }
+    }
+
+    private void stopRecording() {
+        Log.i("Websocket","call stoprecording function");
+        if(null != recorder) {
+            isRecording = false;
+
+            int i = recorder.getState();
+            if (i == 1)
+                recorder.stop();
+            recorder.release();
+
+            recorder = null;
+            recordingThread = null;
+            mStartRecording=!mStartRecording;
+        }
     }
 
     /**

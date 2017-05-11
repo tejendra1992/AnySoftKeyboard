@@ -19,6 +19,9 @@
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- REQUIRED BACKUP TO/RESTORE FROM SDCARD -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- currently, only support touch and fake-touch devices -->
     <uses-feature android:name="android.hardware.faketouch"/>
