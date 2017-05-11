@@ -5,7 +5,7 @@ ext.androidBuildTools = '25.0.2'
 ext.supportLibVersion = '24.1.1'
 ext.AnySoftKeyboardApiVersion = '1.9.0'
 
-ext.sdkTargetVersion = 25
+ext.sdkTargetVersion = 22
 ext.sdkCompileVersion = 25
 ext.sdkMinimumVersion = 7
 
